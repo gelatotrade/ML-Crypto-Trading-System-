@@ -43,7 +43,8 @@ ML-Crypto-Trading-System/
 │   ├── token_unlock_pipeline.py    # Token unlock analysis
 │   ├── buyback_analyzer.py         # HYPE buyback tracking
 │   ├── orderbook_pipeline.py       # Multi-exchange orderbook
-│   └── inflation_strategy.py       # Inflation/deflation signals
+│   ├── inflation_strategy.py       # Inflation/deflation signals
+│   └── drift_protection.py         # Drift detection & mitigation
 │
 ├── dex_clients/
 │   ├── hyperliquid_client.py       # Hyperliquid DEX
@@ -579,6 +580,300 @@ asyncio.run(test())
 
 10. POSITION MANAGEMENT
     └─ P&L tracking, metrics
+
+11. DRIFT PROTECTION
+    ├─ Statistical drift detection
+    ├─ Performance monitoring
+    └─ Automatic risk adjustment
+```
+
+---
+
+## Drift Protection Pipeline (Detailed)
+
+### What is Model Drift?
+
+Model drift occurs when the relationship between input features and predictions changes over time, causing model performance to degrade. In crypto markets, drift is common due to:
+
+- **Regime Changes**: Bull/bear market transitions
+- **Structural Changes**: New market participants, regulatory changes
+- **Black Swan Events**: Flash crashes, major hacks
+- **Seasonality**: Different behavior in different market cycles
+
+### Types of Drift
+
+| Type | Description | Detection Method |
+|------|-------------|------------------|
+| **Data Drift** | Feature distributions change | KS-Test, PSI |
+| **Concept Drift** | Feature-target relationship changes | Performance monitoring |
+| **Performance Drift** | Model accuracy degrades | Sharpe, hit-rate tracking |
+| **Regime Drift** | Market regime shifts | Regime detection |
+
+### Drift Protection Components
+
+#### 1. Statistical Drift Detection
+
+The pipeline uses multiple statistical tests:
+
+```python
+from ml_engine.drift_protection import DriftProtectionPipeline, DriftConfig
+
+# Initialize with custom thresholds
+config = DriftConfig(
+    ks_test_threshold=0.1,      # KS-Test threshold
+    psi_threshold=0.2,          # Population Stability Index threshold
+    sharpe_min_threshold=0.5,   # Minimum acceptable Sharpe
+    drawdown_threshold=0.10,    # Max drawdown trigger
+)
+
+pipeline = DriftProtectionPipeline(config=config)
+
+# Set baseline for a feature
+pipeline.set_feature_baseline("BTC_returns", historical_returns)
+
+# Update current values
+pipeline.update_current_features("BTC_returns", recent_returns)
+
+# Check for drift
+report = pipeline.check_all_drift()
+
+print(f"Severity: {report.overall_severity.value}")
+print(f"Action: {report.recommended_action.value}")
+print(f"Drifted features: {report.drifted_features}")
+```
+
+**Kolmogorov-Smirnov Test (KS-Test)**:
+- Compares baseline vs. current feature distributions
+- Threshold: 0.1 (configurable)
+- Detects significant distribution shifts
+
+**Population Stability Index (PSI)**:
+- Measures distribution stability over time
+- PSI < 0.1: Stable (no action)
+- 0.1 ≤ PSI < 0.2: Moderate drift (monitor)
+- PSI ≥ 0.2: Significant drift (retrain)
+
+**CUSUM Test**:
+- Detects change points in time series
+- Good for sudden regime changes
+
+#### 2. Performance Monitoring
+
+Real-time tracking of key metrics:
+
+```python
+# Add return observations
+pipeline.performance_monitor.add_return(0.02, datetime.utcnow())
+
+# Add completed trade
+pipeline.performance_monitor.add_trade({
+    'timestamp': datetime.utcnow(),
+    'symbol': 'BTC/USDT',
+    'side': 'long',
+    'pnl': 150.0,
+    'pnl_pct': 0.015
+})
+
+# Calculate metrics
+metrics = pipeline.performance_monitor.calculate_metrics(window_days=7)
+
+print(f"Sharpe: {metrics.sharpe_ratio:.2f}")
+print(f"Drawdown: {metrics.current_drawdown:.1%}")
+print(f"Hit rate: {metrics.hit_rate:.1%}")
+```
+
+**Monitored Metrics**:
+| Metric | Threshold | Action on Breach |
+|--------|-----------|------------------|
+| Sharpe Ratio | < 0.5 | Reduce positions |
+| Sharpe Drop | > 0.5 from baseline | Retrain model |
+| Max Drawdown | > 10% | Reduce positions |
+| Hit Rate | < 45% | Increase monitoring |
+
+#### 3. Automatic Risk Controls
+
+When drift is detected, the system automatically adjusts:
+
+```python
+# Get position multiplier
+multiplier = pipeline.get_position_multiplier()
+
+# Severity -> Multiplier mapping:
+# NONE:     1.0   (100% normal positions)
+# LOW:      1.0   (continue monitoring)
+# MEDIUM:   0.75  (25% reduction)
+# HIGH:     0.5   (50% reduction)
+# CRITICAL: 0.0   (halt trading)
+
+# Apply to signals
+adjusted_position = original_position * multiplier
+```
+
+**Severity Levels**:
+
+| Severity | Position Multiplier | Recommended Action |
+|----------|--------------------|--------------------|
+| NONE | 1.0 | Continue normal trading |
+| LOW | 1.0 | Monitor more frequently |
+| MEDIUM | 0.75 | Schedule retraining |
+| HIGH | 0.5 | Reduce exposure, retrain |
+| CRITICAL | 0.0 | Halt trading immediately |
+
+#### 4. Rolling Window Retraining
+
+Models are automatically retrained when:
+- Scheduled interval reached (default: 7 days)
+- Performance drift detected
+- Significant feature drift detected
+
+```python
+# Check if retraining needed
+if pipeline.should_retrain():
+    # Get recent data
+    features, targets = pipeline.online_adapter.get_recent_data(
+        window_hours=168  # 1 week
+    )
+
+    # Retrain models (implementation-specific)
+    model.fit(features, targets)
+
+    # Reset baseline
+    pipeline.on_retraining_complete()
+```
+
+#### 5. Robust Feature Engineering
+
+The pipeline includes drift-resistant features:
+
+```python
+from ml_engine.drift_protection import RobustFeatureEngineer
+
+engineer = RobustFeatureEngineer()
+
+# Create drift-resistant features
+robust_features = engineer.create_robust_features(ohlcv_df, symbol="BTC/USDT")
+
+# Features created:
+# - risk_adj_return: Returns / volatility (more stable than absolute)
+# - return_zscore: Z-normalized returns
+# - return_percentile: Percentile rank (0-1, very stable)
+# - vol_percentile: Volatility percentile
+# - risk_adj_momentum: Momentum / volatility
+```
+
+**Why Robust Features?**
+- Absolute returns drift with volatility regimes
+- Risk-adjusted returns are more stable
+- Percentile ranks invariant to distribution shifts
+- Z-scores normalize for changing means/variances
+
+#### 6. Regime-Specific Models
+
+Train specialized models for different regimes:
+
+```python
+# Register regime-specific models
+pipeline.register_regime_model("bull", bull_market_model)
+pipeline.register_regime_model("bear", bear_market_model)
+pipeline.register_regime_model("sideways", sideways_model)
+
+# Switch regime when detected
+pipeline.switch_regime("bear")
+
+# Get current regime model
+model = pipeline.get_regime_model(current_regime)
+```
+
+#### 7. Online Learning
+
+Incremental model updates without full retraining:
+
+```python
+from ml_engine.drift_protection import OnlineLearningAdapter
+
+adapter = OnlineLearningAdapter(config, base_model=model)
+
+# Add new observation
+adapter.add_observation(
+    features=new_features,
+    target=actual_return,
+    timestamp=datetime.utcnow()
+)
+
+# Learning rate decays over time
+lr = adapter.get_effective_learning_rate()
+
+# Check if update needed
+if adapter.should_update(datetime.utcnow()):
+    recent_data = adapter.get_recent_data()
+    # Perform incremental update
+```
+
+### Drift Monitoring Dashboard
+
+Get a summary of drift status:
+
+```python
+summary = pipeline.create_monitoring_summary()
+
+# Returns:
+{
+    "timestamp": "2024-12-09T10:30:00",
+    "overall_severity": "medium",
+    "recommended_action": "retrain",
+    "position_multiplier": 0.75,
+    "data_drift_score": 0.15,
+    "drifted_features_count": 3,
+    "stable_features_count": 12,
+    "alerts_count": 2,
+    "current_sharpe": 1.2,
+    "current_drawdown": 0.05,
+    "retraining_scheduled": true,
+    "current_regime": "neutral",
+    "recommendations": [
+        "MEDIUM: Schedule model retraining",
+        "Increase monitoring frequency",
+        "Re-evaluate features: BTC_returns, ETH_volatility"
+    ]
+}
+```
+
+### Best Practices for Drift Prevention
+
+1. **Use Robust Features**: Risk-adjusted and normalized features drift less
+2. **Monitor Continuously**: Check drift at every iteration
+3. **Retrain Regularly**: Even without drift, retrain weekly
+4. **Multiple Models**: Use regime-specific models
+5. **Hard Risk Limits**: Always have stop-losses as last defense
+6. **Conservative on Drift**: Reduce positions early, don't wait for critical
+
+### Configuration
+
+```bash
+# .env configuration for drift protection
+
+# Statistical thresholds
+DRIFT_KS_THRESHOLD=0.1
+DRIFT_PSI_THRESHOLD=0.2
+
+# Performance thresholds
+DRIFT_SHARPE_MIN=0.5
+DRIFT_SHARPE_DROP=0.5
+DRIFT_DRAWDOWN_THRESHOLD=0.10
+DRIFT_HIT_RATE_MIN=0.45
+
+# Monitoring windows
+DRIFT_BASELINE_DAYS=30
+DRIFT_DETECTION_DAYS=7
+DRIFT_RETRAIN_DAYS=7
+
+# Risk controls
+DRIFT_MAX_REDUCTION=0.5
+DRIFT_HALT_ON_CRITICAL=true
+
+# Online learning
+DRIFT_ONLINE_LEARNING=true
+DRIFT_LEARNING_RATE=0.01
 ```
 
 ---
@@ -600,6 +895,9 @@ asyncio.run(test())
 - Token unlock data may have delays
 - Meme tokens are high volatility - small positions only
 - Buyback analysis is supplementary, not guaranteed
+- **Model drift is inevitable** - monitor drift alerts closely
+- Halt trading if drift protection triggers CRITICAL severity
+- Regular retraining is essential for long-term performance
 
 ---
 
