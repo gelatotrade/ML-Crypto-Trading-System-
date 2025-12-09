@@ -21,7 +21,7 @@ from typing import Dict, Optional
 from dotenv import load_dotenv
 
 # ML Engine imports
-from ml_engine.config import Config, TradingMode
+from ml_engine.config import Config, TradingMode, AssetType
 from ml_engine.data_collector import DataCollector
 from ml_engine.market_data_aggregator import MarketDataAggregator
 from ml_engine.feature_engineering import FeatureEngineer
@@ -36,6 +36,12 @@ from ml_engine.correlation_screener import CorrelationScreener
 from ml_engine.options_flow import OptionsFlowAnalyzer
 from ml_engine.options_data_collector import OptionsDataCollector
 from ml_engine.regime_detector import RegimeDetector
+
+# New pipelines for inflation/deflation strategy
+from ml_engine.token_unlock_pipeline import TokenUnlockPipeline, UnlockRisk
+from ml_engine.buyback_analyzer import BuybackAnalyzer, BuybackSentiment
+from ml_engine.orderbook_pipeline import OrderbookPipeline, Exchange
+from ml_engine.inflation_strategy import InflationDeflationStrategy, InflationSignal
 
 # DEX clients
 from dex_clients.lighter_client import LighterClient
@@ -106,6 +112,41 @@ class MLTradingBot:
         else:
             self.options_collector = None
             self.options_analyzer = None
+
+        # Initialize new pipelines for inflation/deflation strategy
+        self._init_inflation_pipelines()
+
+    def _init_inflation_pipelines(self):
+        """Initialize token unlock, buyback, and orderbook pipelines"""
+        # Get API keys from environment
+        tokenomist_key = os.getenv('TOKENOMIST_API_KEY', '')
+        cryptorank_key = os.getenv('CRYPTORANK_API_KEY', '')
+
+        # Token unlock pipeline (Tokenomist + CryptoRank)
+        self.unlock_pipeline = TokenUnlockPipeline(
+            tokenomist_api_key=tokenomist_key if tokenomist_key else None,
+            cryptorank_api_key=cryptorank_key if cryptorank_key else None
+        )
+
+        # Buyback analyzer (HypurrScan for HYPE)
+        self.buyback_analyzer = BuybackAnalyzer(
+            tokenomist_api_key=tokenomist_key if tokenomist_key else None
+        )
+
+        # Orderbook pipeline (Bybit, Binance, Hyperliquid, Lighter)
+        self.orderbook_pipeline = OrderbookPipeline(
+            symbols=self.config.get_symbols(),
+            exchanges=[Exchange.BYBIT, Exchange.BINANCE, Exchange.HYPERLIQUID],
+            depth_levels=50
+        )
+
+        # Combined inflation/deflation strategy
+        self.inflation_strategy = InflationDeflationStrategy(
+            tokenomist_api_key=tokenomist_key if tokenomist_key else None,
+            cryptorank_api_key=cryptorank_key if cryptorank_key else None
+        )
+
+        logger.info("Initialized inflation/deflation analysis pipelines")
 
     def _init_ml_components(self):
         """Initialize ML components"""
@@ -285,11 +326,17 @@ class MLTradingBot:
                     returns, method='ewma', window=20, annualize=True
                 ).iloc[-1]
 
-        # Step 7: Generate signals
+        # Step 7: Generate ML-based signals
         logger.info("Generating trading signals...")
         signals = self.signal_generator.generate_signals(
             predictions, volatilities, prices
         )
+
+        # Step 7.5: Integrate inflation/deflation analysis
+        # This is an ADDITIONAL factor, not the sole strategy
+        logger.info("Analyzing inflation/deflation factors...")
+        inflation_signals = await self._analyze_inflation_deflation(symbols, prices)
+        signals = self._integrate_inflation_signals(signals, inflation_signals)
 
         # Step 8: Screen for correlations
         logger.info("Screening for correlations...")
@@ -363,6 +410,118 @@ class MLTradingBot:
 
         logger.info(f"Collected data for {len(market_data)}/{len(symbols)} symbols")
         return market_data
+
+    async def _analyze_inflation_deflation(self, symbols, prices):
+        """
+        Analyze token unlock schedules and buyback activity
+
+        This provides ADDITIONAL signals to complement ML predictions:
+        - Short bias for tokens with large upcoming unlocks
+        - Long bias for deflationary tokens during active buybacks
+        """
+        inflation_signals = {}
+
+        try:
+            # Get orderbook analysis if available
+            orderbook_analyses = self.orderbook_pipeline.get_all_analyses()
+
+            # Screen all symbols through inflation strategy
+            inflation_signals = await self.inflation_strategy.screen_universe(
+                symbols, prices, orderbook_analyses
+            )
+
+            # Log significant findings
+            shorts = [s for s, sig in inflation_signals.items()
+                     if sig.direction.value.startswith('short')]
+            longs = [s for s, sig in inflation_signals.items()
+                    if sig.direction.value.startswith('long')]
+
+            if shorts:
+                logger.info(f"Inflation analysis - Short candidates: {len(shorts)}")
+                for symbol in shorts[:3]:
+                    sig = inflation_signals[symbol]
+                    logger.info(f"  {symbol}: {sig.inflation_type.value} ({sig.combined_signal:.2f})")
+
+            if longs:
+                logger.info(f"Inflation analysis - Long candidates: {len(longs)}")
+                for symbol in longs[:3]:
+                    sig = inflation_signals[symbol]
+                    logger.info(f"  {symbol}: {sig.inflation_type.value} ({sig.combined_signal:.2f})")
+
+            # Log upcoming unlocks
+            unlock_calendar = self.inflation_strategy.get_unlock_calendar(days_ahead=7)
+            if unlock_calendar:
+                logger.info(f"Upcoming unlocks (7 days): {len(unlock_calendar)}")
+                for unlock in unlock_calendar[:3]:
+                    logger.info(f"  {unlock['token']}: {unlock['amount_pct']:.1f}% on {unlock['date'][:10]}")
+
+        except Exception as e:
+            logger.warning(f"Inflation/deflation analysis failed: {e}")
+
+        return inflation_signals
+
+    def _integrate_inflation_signals(self, ml_signals, inflation_signals):
+        """
+        Integrate inflation/deflation signals into ML signals
+
+        Weight distribution (configurable):
+        - ML predictions: 70%
+        - Inflation/deflation: 30%
+
+        This ensures inflation analysis is a COMPONENT, not the sole driver
+        """
+        INFLATION_WEIGHT = 0.30  # 30% weight for inflation signals
+        ML_WEIGHT = 0.70         # 70% weight for ML signals
+
+        if not inflation_signals:
+            return ml_signals
+
+        for symbol, ml_signal in ml_signals.items():
+            if symbol not in inflation_signals:
+                continue
+
+            inf_signal = inflation_signals[symbol]
+
+            # Only adjust if inflation signal is significant
+            if abs(inf_signal.combined_signal) < 0.25:
+                continue
+
+            # Adjust target weight based on inflation signal
+            # Positive inflation signal (long) increases weight
+            # Negative inflation signal (short) decreases weight
+            inflation_adjustment = inf_signal.combined_signal * INFLATION_WEIGHT
+
+            # Update signal weight
+            original_weight = ml_signal.target_weight
+            adjusted_weight = (original_weight * ML_WEIGHT) + inflation_adjustment
+
+            # Apply position limits based on asset type
+            asset_type = self.config.get_asset_type(symbol)
+            max_pos = self.config.get_position_limit(symbol)
+
+            # Meme tokens: only allow shorts
+            if asset_type == AssetType.MEME and adjusted_weight > 0:
+                adjusted_weight = 0  # Don't long meme tokens
+
+            # High unlock tokens: bias toward shorts
+            if asset_type == AssetType.HIGH_UNLOCK and inf_signal.unlock_signal < -0.3:
+                adjusted_weight = min(adjusted_weight, -0.05)  # Ensure short bias
+
+            # Deflationary tokens: boost longs during buybacks
+            if asset_type == AssetType.DEFLATIONARY and inf_signal.buyback_signal > 0.5:
+                adjusted_weight = max(adjusted_weight, original_weight * 1.2)  # 20% boost
+
+            # Cap to position limits
+            adjusted_weight = max(-max_pos, min(max_pos, adjusted_weight))
+
+            ml_signal.target_weight = adjusted_weight
+
+            # Log significant adjustments
+            if abs(adjusted_weight - original_weight) > 0.02:
+                logger.debug(f"{symbol}: Weight adjusted {original_weight:.3f} -> {adjusted_weight:.3f} "
+                           f"(inflation: {inf_signal.combined_signal:.2f})")
+
+        return ml_signals
 
     async def _get_options_analysis(self):
         """Get options flow analysis"""

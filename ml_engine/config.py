@@ -16,9 +16,11 @@ class TradingMode(Enum):
 
 
 class AssetType(Enum):
-    MAJOR = "major"        # Full position limits (BTC, ETH)
-    ALTCOIN = "altcoin"    # 50% position limits, volatility-adjusted
-    HEDGE = "hedge"        # 150% position limits (HYPE)
+    MAJOR = "major"           # Full position limits (BTC, ETH)
+    ALTCOIN = "altcoin"       # 50% position limits, volatility-adjusted
+    MEME = "meme"             # High volatility, inflation-based shorts
+    DEFLATIONARY = "deflationary"  # Buyback/burn tokens (HYPE)
+    HIGH_UNLOCK = "high_unlock"    # Tokens with significant upcoming unlocks
 
 
 @dataclass
@@ -32,7 +34,9 @@ class RiskConfig:
     var_confidence: float = 0.95        # 95% VaR confidence
     position_limit_major: float = 0.20  # 20% max for majors
     position_limit_altcoin: float = 0.10  # 10% max for altcoins
-    position_limit_hedge: float = 0.30   # 30% max for hedge assets
+    position_limit_meme: float = 0.05   # 5% max for meme tokens (shorts only)
+    position_limit_deflationary: float = 0.15  # 15% max for deflationary (buyback) tokens
+    position_limit_high_unlock: float = 0.08   # 8% max for high unlock tokens
     min_sharpe_ratio: float = 2.5       # Minimum target Sharpe
 
 
@@ -95,27 +99,102 @@ class Config:
     """Main configuration class"""
 
     # Asset universe with classifications
+    # Based on Lighter.xyz available pairs + inflation/deflation strategy tokens
     ASSET_UNIVERSE: Dict[str, AssetType] = {
-        # Major assets
+        # ═══════════════════════════════════════════════════════════════
+        # MAJOR ASSETS (50x leverage on Lighter)
+        # ═══════════════════════════════════════════════════════════════
         "BTC/USDT": AssetType.MAJOR,
         "ETH/USDT": AssetType.MAJOR,
-        # Mid-cap altcoins
+
+        # ═══════════════════════════════════════════════════════════════
+        # LIGHTER.XYZ PERPETUAL PAIRS (8-15x leverage)
+        # ═══════════════════════════════════════════════════════════════
         "SOL/USDT": AssetType.ALTCOIN,
         "AVAX/USDT": AssetType.ALTCOIN,
-        "MATIC/USDT": AssetType.ALTCOIN,
         "LINK/USDT": AssetType.ALTCOIN,
-        # Smaller altcoins
+        "NEAR/USDT": AssetType.ALTCOIN,
+        "DOT/USDT": AssetType.ALTCOIN,
+        "TON/USDT": AssetType.ALTCOIN,
+        "TAO/USDT": AssetType.ALTCOIN,
+        "POL/USDT": AssetType.ALTCOIN,   # Polygon (formerly MATIC)
+
+        # ═══════════════════════════════════════════════════════════════
+        # MEME TOKENS (HIGH INFLATION - SHORT CANDIDATES)
+        # High volatility, often inflationary, targets for shorts
+        # ═══════════════════════════════════════════════════════════════
+        "DOGE/USDT": AssetType.MEME,
+        "PEPE/USDT": AssetType.MEME,
+        "WLD/USDT": AssetType.MEME,      # Worldcoin - large unlock schedule
+        "SHIB/USDT": AssetType.MEME,
+        "BONK/USDT": AssetType.MEME,
+        "WIF/USDT": AssetType.MEME,
+        "FLOKI/USDT": AssetType.MEME,
+
+        # ═══════════════════════════════════════════════════════════════
+        # HIGH UNLOCK TOKENS (TEAM/VC PRESSURE - SHORT CANDIDATES)
+        # Tokens with significant upcoming team/investor unlocks
+        # ═══════════════════════════════════════════════════════════════
+        "ARB/USDT": AssetType.HIGH_UNLOCK,    # Arbitrum - large VC unlocks
+        "OP/USDT": AssetType.HIGH_UNLOCK,     # Optimism - team unlocks
+        "APT/USDT": AssetType.HIGH_UNLOCK,    # Aptos - investor unlocks
+        "SUI/USDT": AssetType.HIGH_UNLOCK,    # Sui - team/investor unlocks
+        "SEI/USDT": AssetType.HIGH_UNLOCK,    # Sei - ecosystem unlocks
+        "TIA/USDT": AssetType.HIGH_UNLOCK,    # Celestia - unlock schedule
+        "JUP/USDT": AssetType.HIGH_UNLOCK,    # Jupiter - team unlocks
+        "STRK/USDT": AssetType.HIGH_UNLOCK,   # Starknet - VC unlocks
+
+        # ═══════════════════════════════════════════════════════════════
+        # DEFLATIONARY TOKENS (BUYBACK/BURN - LONG CANDIDATES)
+        # Tokens with active buyback programs
+        # NOTE: HYPE is NOT a hedge asset - uses buyback-based sizing
+        # ═══════════════════════════════════════════════════════════════
+        "HYPE/USDT": AssetType.DEFLATIONARY,  # 97% fee buyback - LONG when buybacks active
+        "BNB/USDT": AssetType.DEFLATIONARY,   # Quarterly burns
+
+        # ═══════════════════════════════════════════════════════════════
+        # OTHER ALTCOINS (STANDARD)
+        # ═══════════════════════════════════════════════════════════════
         "UNI/USDT": AssetType.ALTCOIN,
         "AAVE/USDT": AssetType.ALTCOIN,
-        "SUSHI/USDT": AssetType.ALTCOIN,
         "CRV/USDT": AssetType.ALTCOIN,
         "LDO/USDT": AssetType.ALTCOIN,
-        "ARB/USDT": AssetType.ALTCOIN,
-        "OP/USDT": AssetType.ALTCOIN,
         "IMX/USDT": AssetType.ALTCOIN,
-        # Hedge asset
-        "HYPE/USDT": AssetType.HEDGE,
+        "INJ/USDT": AssetType.ALTCOIN,
+        "FTM/USDT": AssetType.ALTCOIN,
+        "ATOM/USDT": AssetType.ALTCOIN,
+        "FIL/USDT": AssetType.ALTCOIN,
+        "RUNE/USDT": AssetType.ALTCOIN,
     }
+
+    # Manual token additions - users can add custom tokens here
+    # Format: {"SYMBOL/USDT": AssetType.TYPE}
+    CUSTOM_TOKENS: Dict[str, AssetType] = {}
+
+    @classmethod
+    def add_custom_token(cls, symbol: str, asset_type: AssetType):
+        """
+        Add a custom token to the universe
+
+        Args:
+            symbol: Trading pair (e.g., 'NEW/USDT')
+            asset_type: Token classification
+
+        Example:
+            Config.add_custom_token("NEWTOKEN/USDT", AssetType.ALTCOIN)
+        """
+        cls.CUSTOM_TOKENS[symbol] = asset_type
+
+    @classmethod
+    def remove_custom_token(cls, symbol: str):
+        """Remove a custom token from the universe"""
+        if symbol in cls.CUSTOM_TOKENS:
+            del cls.CUSTOM_TOKENS[symbol]
+
+    @classmethod
+    def get_all_tokens(cls) -> Dict[str, AssetType]:
+        """Get combined token universe (default + custom)"""
+        return {**cls.ASSET_UNIVERSE, **cls.CUSTOM_TOKENS}
 
     def __init__(self, env_path: Optional[str] = None):
         """Initialize configuration from environment"""
@@ -243,22 +322,53 @@ class Config:
 
     def get_position_limit(self, symbol: str) -> float:
         """Get position limit for a symbol based on asset type"""
-        asset_type = self.ASSET_UNIVERSE.get(symbol, AssetType.ALTCOIN)
+        all_tokens = self.get_all_tokens()
+        asset_type = all_tokens.get(symbol, AssetType.ALTCOIN)
 
         if asset_type == AssetType.MAJOR:
             return self.risk.position_limit_major
-        elif asset_type == AssetType.HEDGE:
-            return self.risk.position_limit_hedge
+        elif asset_type == AssetType.MEME:
+            return self.risk.position_limit_meme
+        elif asset_type == AssetType.DEFLATIONARY:
+            return self.risk.position_limit_deflationary
+        elif asset_type == AssetType.HIGH_UNLOCK:
+            return self.risk.position_limit_high_unlock
         else:
             return self.risk.position_limit_altcoin
 
     def get_asset_type(self, symbol: str) -> AssetType:
         """Get asset type for a symbol"""
-        return self.ASSET_UNIVERSE.get(symbol, AssetType.ALTCOIN)
+        all_tokens = self.get_all_tokens()
+        return all_tokens.get(symbol, AssetType.ALTCOIN)
 
     def get_symbols(self) -> List[str]:
-        """Get list of all symbols in universe"""
-        return list(self.ASSET_UNIVERSE.keys())
+        """Get list of all symbols in universe (default + custom)"""
+        return list(self.get_all_tokens().keys())
+
+    def get_symbols_by_type(self, asset_type: AssetType) -> List[str]:
+        """Get symbols filtered by asset type"""
+        all_tokens = self.get_all_tokens()
+        return [s for s, t in all_tokens.items() if t == asset_type]
+
+    def get_meme_tokens(self) -> List[str]:
+        """Get all meme tokens (short candidates)"""
+        return self.get_symbols_by_type(AssetType.MEME)
+
+    def get_high_unlock_tokens(self) -> List[str]:
+        """Get all high unlock tokens (short candidates)"""
+        return self.get_symbols_by_type(AssetType.HIGH_UNLOCK)
+
+    def get_deflationary_tokens(self) -> List[str]:
+        """Get all deflationary tokens (long candidates during buybacks)"""
+        return self.get_symbols_by_type(AssetType.DEFLATIONARY)
+
+    def get_short_candidates(self) -> List[str]:
+        """Get all tokens suitable for shorting (meme + high_unlock)"""
+        return self.get_meme_tokens() + self.get_high_unlock_tokens()
+
+    def get_long_candidates(self) -> List[str]:
+        """Get all tokens suitable for longing (deflationary)"""
+        return self.get_deflationary_tokens()
 
     def is_paper_mode(self) -> bool:
         """Check if running in paper trading mode"""
