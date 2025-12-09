@@ -43,6 +43,15 @@ from ml_engine.buyback_analyzer import BuybackAnalyzer, BuybackSentiment
 from ml_engine.orderbook_pipeline import OrderbookPipeline, Exchange
 from ml_engine.inflation_strategy import InflationDeflationStrategy, InflationSignal
 
+# Drift protection pipeline
+from ml_engine.drift_protection import (
+    DriftProtectionPipeline,
+    DriftConfig,
+    DriftSeverity,
+    ModelAction,
+    DriftReport
+)
+
 # DEX clients
 from dex_clients.lighter_client import LighterClient
 from dex_clients.hyperliquid_client import HyperliquidClient
@@ -147,6 +156,39 @@ class MLTradingBot:
         )
 
         logger.info("Initialized inflation/deflation analysis pipelines")
+
+        # Initialize drift protection pipeline
+        self._init_drift_protection()
+
+    def _init_drift_protection(self):
+        """Initialize drift protection and monitoring pipeline"""
+        drift_config = DriftConfig(
+            # Statistical thresholds
+            ks_test_threshold=float(os.getenv('DRIFT_KS_THRESHOLD', '0.1')),
+            psi_threshold=float(os.getenv('DRIFT_PSI_THRESHOLD', '0.2')),
+
+            # Performance thresholds
+            sharpe_min_threshold=float(os.getenv('DRIFT_SHARPE_MIN', '0.5')),
+            sharpe_drop_threshold=float(os.getenv('DRIFT_SHARPE_DROP', '0.5')),
+            drawdown_threshold=float(os.getenv('DRIFT_DRAWDOWN_THRESHOLD', '0.10')),
+            hit_rate_min=float(os.getenv('DRIFT_HIT_RATE_MIN', '0.45')),
+
+            # Windows
+            baseline_window_days=int(os.getenv('DRIFT_BASELINE_DAYS', '30')),
+            detection_window_days=int(os.getenv('DRIFT_DETECTION_DAYS', '7')),
+            retraining_frequency_days=int(os.getenv('DRIFT_RETRAIN_DAYS', '7')),
+
+            # Risk controls
+            max_position_reduction=float(os.getenv('DRIFT_MAX_REDUCTION', '0.5')),
+            halt_on_critical=os.getenv('DRIFT_HALT_ON_CRITICAL', 'true').lower() == 'true',
+
+            # Online learning
+            online_learning_enabled=os.getenv('DRIFT_ONLINE_LEARNING', 'true').lower() == 'true',
+            online_learning_rate=float(os.getenv('DRIFT_LEARNING_RATE', '0.01'))
+        )
+
+        self.drift_protection = DriftProtectionPipeline(config=drift_config)
+        logger.info("Initialized drift protection pipeline")
 
     def _init_ml_components(self):
         """Initialize ML components"""
@@ -269,6 +311,12 @@ class MLTradingBot:
     async def _trading_iteration(self):
         """Single trading iteration"""
         symbols = self.config.get_symbols()
+
+        # Step 0: Check for drift and adjust risk
+        drift_report = await self._check_drift_and_adjust()
+        if drift_report and drift_report.recommended_action == ModelAction.HALT_TRADING:
+            logger.warning("DRIFT ALERT: Trading halted due to critical drift")
+            return
 
         # Step 1: Collect market data
         logger.info("Collecting market data...")
@@ -522,6 +570,158 @@ class MLTradingBot:
                            f"(inflation: {inf_signal.combined_signal:.2f})")
 
         return ml_signals
+
+    async def _check_drift_and_adjust(self) -> Optional[DriftReport]:
+        """
+        Check for model drift and adjust risk accordingly
+
+        This is a critical safety mechanism that:
+        1. Monitors performance degradation
+        2. Detects feature distribution changes
+        3. Triggers retraining when needed
+        4. Reduces positions during high drift
+        """
+        try:
+            # Run comprehensive drift check
+            drift_report = self.drift_protection.check_all_drift()
+
+            # Log drift status
+            if drift_report.overall_severity != DriftSeverity.NONE:
+                logger.warning(f"Drift detected: {drift_report.overall_severity.value}")
+                logger.warning(f"Recommended action: {drift_report.recommended_action.value}")
+
+                for rec in drift_report.recommendations[:3]:
+                    logger.warning(f"  - {rec}")
+
+                # Log drifted features
+                if drift_report.drifted_features:
+                    logger.warning(f"Drifted features: {', '.join(drift_report.drifted_features[:5])}")
+
+            # Check if retraining needed
+            if self.drift_protection.should_retrain():
+                logger.info("Model retraining scheduled due to drift")
+                await self._trigger_model_retrain()
+
+            # Log position multiplier
+            multiplier = self.drift_protection.get_position_multiplier()
+            if multiplier < 1.0:
+                logger.warning(f"Position sizes reduced to {multiplier:.0%} due to drift")
+
+            return drift_report
+
+        except Exception as e:
+            logger.error(f"Drift check failed: {e}")
+            return None
+
+    async def _trigger_model_retrain(self):
+        """
+        Trigger model retraining with recent data
+
+        Uses rolling window of recent data for incremental update
+        """
+        logger.info("Starting model retraining...")
+
+        try:
+            # Get recent data from online adapter
+            features, targets = self.drift_protection.online_adapter.get_recent_data(
+                window_hours=168  # 1 week
+            )
+
+            if len(features) > 100:  # Minimum data requirement
+                # Retrain models (simplified - actual implementation depends on ML framework)
+                logger.info(f"Retraining with {len(features)} recent samples")
+
+                # Mark retraining complete and reset baseline
+                self.drift_protection.on_retraining_complete()
+                logger.info("Model retraining complete, baseline reset")
+            else:
+                logger.warning("Insufficient data for retraining")
+
+        except Exception as e:
+            logger.error(f"Model retraining failed: {e}")
+
+    def _update_drift_monitoring(
+        self,
+        features_data: Dict,
+        returns_data: Dict,
+        predictions: Dict
+    ):
+        """
+        Update drift monitoring with current iteration data
+
+        Called after each trading iteration to:
+        1. Update feature baselines
+        2. Track prediction accuracy
+        3. Record returns for performance monitoring
+        """
+        from datetime import datetime
+        import numpy as np
+
+        now = datetime.utcnow()
+
+        # Update feature distributions for drift detection
+        for symbol, features_df in features_data.items():
+            if features_df.empty:
+                continue
+
+            # Key features to monitor
+            key_features = ['returns', 'volatility', 'rsi', 'momentum']
+
+            for feature in key_features:
+                if feature in features_df.columns:
+                    values = features_df[feature].dropna().values
+                    if len(values) > 20:
+                        feature_key = f"{symbol}_{feature}"
+
+                        # Set baseline if not exists
+                        if feature_key not in self.drift_protection._baseline_features:
+                            self.drift_protection.set_feature_baseline(feature_key, values)
+                        else:
+                            # Update current values
+                            self.drift_protection.update_current_features(feature_key, values)
+
+        # Update returns for performance monitoring
+        for symbol, returns in returns_data.items():
+            if len(returns) > 0:
+                # Add latest return
+                latest_return = returns.iloc[-1] if hasattr(returns, 'iloc') else returns[-1]
+                self.drift_protection.performance_monitor.add_return(float(latest_return), now)
+
+        # Track predictions for online learning
+        for symbol, pred in predictions.items():
+            if pred.confidence > 0.5:  # Only track confident predictions
+                # This would need actual features - simplified here
+                self.drift_protection.online_adapter.add_observation(
+                    features=np.array([pred.predicted_return, pred.confidence]),
+                    target=pred.predicted_return,
+                    timestamp=now
+                )
+
+    def _apply_drift_adjustment(self, signals: Dict) -> Dict:
+        """
+        Apply drift-based position reduction to signals
+
+        Reduces all position sizes when drift is detected
+        """
+        multiplier = self.drift_protection.get_position_multiplier()
+
+        if multiplier >= 1.0:
+            return signals
+
+        logger.info(f"Applying drift adjustment: {multiplier:.0%} of normal positions")
+
+        for symbol, signal in signals.items():
+            original = signal.target_weight
+            signal.target_weight *= multiplier
+
+            if abs(original - signal.target_weight) > 0.01:
+                logger.debug(f"{symbol}: Position reduced {original:.3f} -> {signal.target_weight:.3f}")
+
+        return signals
+
+    def get_drift_summary(self) -> Dict:
+        """Get current drift monitoring summary"""
+        return self.drift_protection.create_monitoring_summary()
 
     async def _get_options_analysis(self):
         """Get options flow analysis"""

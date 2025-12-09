@@ -18,7 +18,23 @@ from .options_data_collector import OptionsDataCollector
 from .regime_detector import RegimeDetector
 from .correlation_screener import CorrelationScreener
 
+# Inflation/Deflation Strategy Components
+from .token_unlock_pipeline import TokenUnlockPipeline, UnlockRisk, UnlockEvent
+from .buyback_analyzer import BuybackAnalyzer, BuybackSentiment, BuybackEvent
+from .orderbook_pipeline import OrderbookPipeline, Exchange, OrderbookSnapshot
+from .inflation_strategy import InflationDeflationStrategy, InflationSignal
+
+# Drift Protection
+from .drift_protection import (
+    DriftProtectionPipeline,
+    DriftConfig,
+    DriftSeverity,
+    ModelAction,
+    DriftReport
+)
+
 __all__ = [
+    # Core Components
     'Config',
     'DataCollector',
     'MarketDataAggregator',
@@ -34,4 +50,22 @@ __all__ = [
     'OptionsDataCollector',
     'RegimeDetector',
     'CorrelationScreener',
+    # Inflation/Deflation Strategy
+    'TokenUnlockPipeline',
+    'UnlockRisk',
+    'UnlockEvent',
+    'BuybackAnalyzer',
+    'BuybackSentiment',
+    'BuybackEvent',
+    'OrderbookPipeline',
+    'Exchange',
+    'OrderbookSnapshot',
+    'InflationDeflationStrategy',
+    'InflationSignal',
+    # Drift Protection
+    'DriftProtectionPipeline',
+    'DriftConfig',
+    'DriftSeverity',
+    'ModelAction',
+    'DriftReport',
 ]
