@@ -39,12 +39,22 @@ ML-Crypto-Trading-System/
 │   ├── options_data_collector.py   # Deribit options data
 │   ├── regime_detector.py          # Risk-on/off detection
 │   │
-│   │   # NEW PIPELINES
+│   │   # STRATEGY PIPELINES
 │   ├── token_unlock_pipeline.py    # Token unlock analysis
 │   ├── buyback_analyzer.py         # HYPE buyback tracking
 │   ├── orderbook_pipeline.py       # Multi-exchange orderbook
 │   ├── inflation_strategy.py       # Inflation/deflation signals
-│   └── drift_protection.py         # Drift detection & mitigation
+│   ├── drift_protection.py         # Drift detection & mitigation
+│   │
+│   │   # ADVANCED ML PIPELINES
+│   ├── meta_pipeline.py            # HMM regime detection, Bayesian optimization
+│   ├── advanced_data_pipeline.py   # Microstructure, NLP, SABR, stationarity
+│   ├── alpha_pipeline.py           # GP regression, QRF, causal inference
+│   ├── advanced_risk_pipeline.py   # Kalman betas, copulas, L-VaR
+│   ├── advanced_portfolio_optimizer.py  # Black-Litterman, online convex
+│   ├── execution_pipeline.py       # Multi-agent, RL execution
+│   ├── monitoring_pipeline.py      # Attribution, PBO, stress testing
+│   └── advanced_ml_optimizations.py # MAML, Bayesian DL, evidential
 │
 ├── dex_clients/
 │   ├── hyperliquid_client.py       # Hyperliquid DEX
@@ -875,6 +885,1149 @@ DRIFT_HALT_ON_CRITICAL=true
 DRIFT_ONLINE_LEARNING=true
 DRIFT_LEARNING_RATE=0.01
 ```
+
+---
+
+## Advanced ML Trading Pipelines
+
+The system includes 8 advanced ML pipelines implementing state-of-the-art quantitative finance techniques based on the Adaptive Market Hypothesis (AMH). These pipelines work together to provide a comprehensive trading system that adapts to changing market conditions.
+
+### Theoretical Foundation: Adaptive Market Hypothesis
+
+Unlike the Efficient Market Hypothesis (EMH), AMH recognizes that market efficiency varies over time. Our system implements:
+
+- **Regime-dependent strategies** that adapt to market conditions
+- **Multi-timescale analysis** capturing different market dynamics
+- **Continuous learning** to adapt to structural changes
+- **Robust uncertainty quantification** for reliable risk assessment
+
+---
+
+### Pipeline 0: Meta-Pipeline (System Control & Adaptivity)
+
+**File**: `ml_engine/meta_pipeline.py`
+
+**Purpose**: Coordinates all subsystems and adapts the overall trading strategy based on market regimes.
+
+#### Components
+
+##### HMM Regime Detector (Hidden Markov Model)
+
+Detects 7 market regimes using a 5-state Hidden Markov Model:
+
+| Regime | Characteristics | Trading Approach |
+|--------|-----------------|------------------|
+| Bull Trending | High returns, moderate vol | Aggressive long |
+| Bear Trending | Negative returns, high vol | Defensive/short |
+| High Volatility | Extreme volatility | Reduce exposure |
+| Low Volatility | Compressed volatility | Mean reversion |
+| Neutral | Normal conditions | Balanced |
+
+```python
+from ml_engine.meta_pipeline import HMMRegimeDetector
+
+detector = HMMRegimeDetector(n_states=5, n_features=3)
+
+# Train on historical data
+detector.fit(returns, volatility, volume)
+
+# Detect current regime
+regime, probabilities = detector.predict_regime(current_features)
+print(f"Current regime: {regime}")
+print(f"Regime probabilities: {probabilities}")
+```
+
+**Mathematical Foundation**:
+- Forward-Backward (Baum-Welch) algorithm for training
+- Viterbi algorithm for state sequence estimation
+- Features: returns, realized volatility, volume ratios
+
+##### Bayesian Hyperparameter Optimizer
+
+Uses Gaussian Process optimization with Upper Confidence Bound (UCB) acquisition:
+
+```python
+from ml_engine.meta_pipeline import BayesianHyperparameterOptimizer
+
+optimizer = BayesianHyperparameterOptimizer(
+    param_bounds={
+        'lookback': (10, 100),
+        'threshold': (0.01, 0.1),
+        'leverage': (1.0, 3.0)
+    }
+)
+
+# Suggest next parameters to try
+next_params = optimizer.suggest_next()
+
+# Update with observed performance
+optimizer.update(next_params, observed_sharpe=2.1)
+```
+
+##### Capital Allocation Engine
+
+Combines Kelly Criterion with Risk-Parity allocation:
+
+```python
+from ml_engine.meta_pipeline import CapitalAllocationEngine
+
+allocator = CapitalAllocationEngine(
+    kelly_fraction=0.5,  # Half-Kelly for safety
+    risk_parity_weight=0.5  # Blend with risk-parity
+)
+
+# Get optimal allocations
+allocations = allocator.allocate(
+    expected_returns={'BTC': 0.02, 'ETH': 0.015},
+    covariance_matrix=cov_matrix,
+    current_regime='bull'
+)
+```
+
+**Kelly Criterion Formula**:
+```
+f* = (μ - r) / σ² × kelly_fraction
+```
+
+Where:
+- μ = expected return
+- r = risk-free rate
+- σ² = variance
+- kelly_fraction = fractional Kelly (0.5 recommended)
+
+---
+
+### Pipeline 1: Advanced Data Pipeline
+
+**File**: `ml_engine/advanced_data_pipeline.py`
+
+**Purpose**: Multi-layer data processing with microstructure analysis, NLP sentiment, and stationarity transformations.
+
+#### Components
+
+##### Microstructure Analyzer
+
+Extracts market microstructure features:
+
+```python
+from ml_engine.advanced_data_pipeline import MicrostructureAnalyzer
+
+analyzer = MicrostructureAnalyzer(
+    vpin_window=50,
+    flow_imbalance_window=100
+)
+
+# Analyze trade data
+features = analyzer.analyze(trades_df, orderbook_df)
+
+print(f"VPIN: {features['vpin']}")  # Volume-Synchronized Probability of Informed Trading
+print(f"Order Flow Imbalance: {features['ofi']}")
+print(f"Kyle's Lambda: {features['kyle_lambda']}")  # Price impact coefficient
+```
+
+**Key Metrics**:
+
+| Metric | Description | Use |
+|--------|-------------|-----|
+| VPIN | Probability of informed trading | Detect information asymmetry |
+| OFI | Order flow imbalance | Predict short-term direction |
+| Kyle's Lambda | Market impact coefficient | Execution optimization |
+| Bid-Ask Spread | Liquidity indicator | Transaction cost estimation |
+
+##### NLP Sentiment Pipeline
+
+Processes text data for sentiment analysis:
+
+```python
+from ml_engine.advanced_data_pipeline import NLPSentimentPipeline
+
+nlp = NLPSentimentPipeline(
+    use_lexicon=True,
+    topic_modeling=True,
+    n_topics=10
+)
+
+# Analyze news/social media
+sentiment = nlp.analyze([
+    "Bitcoin breaks new all-time high",
+    "SEC delays ETF decision again"
+])
+
+print(f"Aggregate sentiment: {sentiment['aggregate_score']}")
+print(f"Topic distribution: {sentiment['topic_weights']}")
+```
+
+**Features**:
+- Lexicon-based sentiment (bullish/bearish word counts)
+- LDA topic modeling for theme extraction
+- Temporal sentiment aggregation
+
+##### SABR Volatility Surface
+
+Calibrates the SABR stochastic volatility model:
+
+```python
+from ml_engine.advanced_data_pipeline import SABRVolatilitySurface
+
+sabr = SABRVolatilitySurface()
+
+# Calibrate to market data
+params = sabr.calibrate(
+    forward_price=50000,
+    strikes=[45000, 47500, 50000, 52500, 55000],
+    market_vols=[0.65, 0.60, 0.58, 0.61, 0.66],
+    time_to_expiry=0.25
+)
+
+print(f"Alpha (vol of vol): {params['alpha']}")
+print(f"Beta (CEV exponent): {params['beta']}")
+print(f"Rho (correlation): {params['rho']}")
+print(f"Nu (vol of vol): {params['nu']}")
+
+# Get implied vol for any strike
+iv = sabr.get_implied_vol(strike=48000, expiry=0.25)
+```
+
+##### Stationarity Transformer
+
+Transforms non-stationary data for ML models:
+
+```python
+from ml_engine.advanced_data_pipeline import StationarityTransformer
+
+transformer = StationarityTransformer()
+
+# Apply transformations
+stationary_data = transformer.transform(price_series, method='zscore')
+
+# Available methods:
+# - 'zscore': Z-score normalization
+# - 'quantile': Percentile transformation
+# - 'fractional_diff': Fractional differencing (preserves memory)
+# - 'log_returns': Log returns
+```
+
+---
+
+### Pipeline 2: Alpha Pipeline (Deep Signal Generation)
+
+**File**: `ml_engine/alpha_pipeline.py`
+
+**Purpose**: Generates alpha signals using hierarchical models, Gaussian Processes, and causal inference.
+
+#### Components
+
+##### Multi-Timeframe Feature Generators
+
+**Momentum Features**:
+```python
+from ml_engine.alpha_pipeline import MomentumFeatures
+
+momentum = MomentumFeatures(lookbacks=[5, 10, 21, 63, 126, 252])
+features = momentum.generate(price_series)
+
+# Features include:
+# - Multi-timeframe momentum
+# - Momentum acceleration
+# - Cross-sectional momentum rank
+```
+
+**Mean Reversion Features**:
+```python
+from ml_engine.alpha_pipeline import MeanReversionFeatures
+
+mr = MeanReversionFeatures(
+    half_lives=[5, 10, 21],
+    zscore_window=20
+)
+features = mr.generate(price_series)
+
+# Features include:
+# - Z-scores at multiple timeframes
+# - Half-life estimation
+# - Hurst exponent (mean-reversion strength)
+```
+
+**Carry Features**:
+```python
+from ml_engine.alpha_pipeline import CarryFeatures
+
+carry = CarryFeatures()
+features = carry.generate(spot_prices, futures_prices, funding_rates)
+
+# Features include:
+# - Futures basis
+# - Funding rate signals
+# - Roll yield
+```
+
+##### Gaussian Process Regressor
+
+Provides predictions with uncertainty quantification:
+
+```python
+from ml_engine.alpha_pipeline import GaussianProcessRegressor
+
+gp = GaussianProcessRegressor(
+    kernel='rbf',
+    length_scale=1.0,
+    noise_level=0.1
+)
+
+# Fit and predict with uncertainty
+gp.fit(X_train, y_train)
+mean, std = gp.predict(X_test, return_std=True)
+
+# Use uncertainty for position sizing
+confidence = 1 / std
+position_size = signal * confidence
+```
+
+**Key Advantage**: GP provides calibrated uncertainty estimates, enabling:
+- Confidence-weighted position sizing
+- Detection of out-of-distribution inputs
+- Adaptive risk management
+
+##### Quantile Random Forest
+
+Predicts full return distribution:
+
+```python
+from ml_engine.alpha_pipeline import QuantileRandomForest
+
+qrf = QuantileRandomForest(
+    n_estimators=100,
+    quantiles=[0.05, 0.25, 0.5, 0.75, 0.95]
+)
+
+# Get quantile predictions
+qrf.fit(X_train, y_train)
+predictions = qrf.predict(X_test)
+
+print(f"5th percentile (VaR): {predictions['q_0.05']}")
+print(f"Median prediction: {predictions['q_0.5']}")
+print(f"95th percentile: {predictions['q_0.95']}")
+
+# Calculate prediction intervals
+interval_width = predictions['q_0.95'] - predictions['q_0.05']
+```
+
+##### Causal Inference Engine
+
+Estimates causal effects using Do-Calculus:
+
+```python
+from ml_engine.alpha_pipeline import CausalInferenceEngine
+
+causal = CausalInferenceEngine()
+
+# Define causal graph
+causal.define_graph({
+    'BTC_return': ['ETH_return', 'funding_rate'],
+    'ETH_return': ['funding_rate'],
+    'funding_rate': []
+})
+
+# Estimate Average Treatment Effect
+ate = causal.estimate_ate(
+    data=df,
+    treatment='funding_rate',
+    outcome='BTC_return',
+    method='inverse_propensity_weighting'
+)
+
+print(f"Causal effect of funding rate on BTC: {ate}")
+```
+
+##### Hierarchical Alpha Model
+
+Combines multiple alpha sources with adaptive weighting:
+
+```python
+from ml_engine.alpha_pipeline import HierarchicalAlphaModel
+
+model = HierarchicalAlphaModel(
+    alpha_sources=['momentum', 'mean_reversion', 'carry', 'ml'],
+    decay_factor=0.94
+)
+
+# Update with new observations
+model.update(predictions={'momentum': 0.02, 'mean_reversion': -0.01},
+             actual_return=0.015)
+
+# Get blended signal with adaptive weights
+signal = model.get_combined_signal()
+print(f"Blended alpha: {signal}")
+print(f"Current weights: {model.weights}")
+```
+
+---
+
+### Pipeline 3: Advanced Risk Pipeline
+
+**File**: `ml_engine/advanced_risk_pipeline.py`
+
+**Purpose**: Comprehensive risk modeling with dynamic betas, copulas, and liquidity-adjusted VaR.
+
+#### Components
+
+##### Kalman Filter Beta Estimation
+
+Tracks time-varying betas dynamically:
+
+```python
+from ml_engine.advanced_risk_pipeline import KalmanFilterBeta
+
+kalman = KalmanFilterBeta(
+    process_variance=0.001,  # How fast beta can change
+    measurement_variance=0.01  # Observation noise
+)
+
+# Update with new observations
+for asset_return, market_return in zip(asset_returns, market_returns):
+    beta, beta_std = kalman.update(asset_return, market_return)
+
+print(f"Current beta: {beta:.3f} ± {beta_std:.3f}")
+```
+
+**Kalman Filter Equations**:
+```
+State: β_t = β_{t-1} + ε_t  (random walk)
+Observation: r_asset = α + β_t × r_market + η_t
+
+Predict: β̂_t|t-1 = β̂_{t-1}
+Update: β̂_t = β̂_t|t-1 + K_t × (r_asset - β̂_t|t-1 × r_market)
+```
+
+##### Multi-Factor Risk Model
+
+Decomposes risk into systematic and idiosyncratic components:
+
+```python
+from ml_engine.advanced_risk_pipeline import MultiFactorRiskModel
+
+risk_model = MultiFactorRiskModel(
+    factors=['market', 'size', 'momentum', 'volatility', 'liquidity']
+)
+
+# Fit model
+risk_model.fit(returns_df, factor_returns_df)
+
+# Get risk decomposition
+decomp = risk_model.decompose_risk(portfolio_weights)
+
+print(f"Systematic risk: {decomp['systematic']:.2%}")
+print(f"Idiosyncratic risk: {decomp['idiosyncratic']:.2%}")
+print(f"Factor contributions: {decomp['factor_contributions']}")
+```
+
+##### Cornish-Fisher VaR
+
+VaR with higher moments (skewness, kurtosis):
+
+```python
+from ml_engine.advanced_risk_pipeline import CornishFisherVaR
+
+cf_var = CornishFisherVaR(confidence=0.99)
+
+# Calculate VaR with skewness/kurtosis adjustment
+var = cf_var.calculate(
+    returns=returns,
+    portfolio_value=1000000
+)
+
+print(f"99% VaR: ${var['var']:,.0f}")
+print(f"99% CVaR: ${var['cvar']:,.0f}")
+print(f"Skewness: {var['skewness']:.2f}")
+print(f"Kurtosis: {var['kurtosis']:.2f}")
+```
+
+**Cornish-Fisher Expansion**:
+```
+z_cf = z + (z² - 1)×S/6 + (z³ - 3z)×K/24 - (2z³ - 5z)×S²/36
+```
+
+Where S = skewness, K = excess kurtosis, z = normal quantile
+
+##### Copula Risk Model
+
+Models tail dependencies between assets:
+
+```python
+from ml_engine.advanced_risk_pipeline import CopulaRiskModel
+
+copula = CopulaRiskModel(copula_type='student_t')
+
+# Fit copula
+copula.fit(returns_df)
+
+print(f"Tail dependence: {copula.tail_dependence}")
+print(f"Degrees of freedom: {copula.df}")
+
+# Simulate correlated returns preserving tail dependence
+simulated = copula.simulate(n_scenarios=10000)
+
+# Calculate joint VaR
+joint_var = copula.joint_var(portfolio_weights, confidence=0.99)
+```
+
+**Why Copulas?**
+- Gaussian correlation underestimates tail risk
+- Student-t copula captures "correlation breakdown" in crashes
+- Better risk estimates during market stress
+
+##### Liquidity-Adjusted VaR (L-VaR)
+
+Incorporates liquidation costs:
+
+```python
+from ml_engine.advanced_risk_pipeline import LiquidityAdjustedRisk
+
+lvar = LiquidityAdjustedRisk(
+    base_spread=0.001,
+    kyle_lambda=0.0001,  # Price impact coefficient
+    liquidation_time=1.0  # Days to liquidate
+)
+
+# Calculate L-VaR
+result = lvar.calculate(
+    position_value=500000,
+    daily_volume=10000000,
+    var_estimate=25000
+)
+
+print(f"Base VaR: ${result['base_var']:,.0f}")
+print(f"Liquidity cost: ${result['liquidity_cost']:,.0f}")
+print(f"L-VaR: ${result['lvar']:,.0f}")
+```
+
+**L-VaR Formula**:
+```
+L-VaR = VaR + Liquidation Cost
+Liquidation Cost = Position × (spread/2 + λ × sqrt(Position/ADV))
+```
+
+---
+
+### Pipeline 4: Advanced Portfolio Optimizer
+
+**File**: `ml_engine/advanced_portfolio_optimizer.py`
+
+**Purpose**: Robust portfolio construction using Black-Litterman and online optimization.
+
+#### Components
+
+##### Black-Litterman Optimizer
+
+Combines market equilibrium with active views:
+
+```python
+from ml_engine.advanced_portfolio_optimizer import BlackLittermanOptimizer
+
+bl = BlackLittermanOptimizer(
+    risk_aversion=2.5,
+    tau=0.05  # Uncertainty in equilibrium
+)
+
+# Set market cap weights (equilibrium)
+bl.set_market_weights({
+    'BTC': 0.50,
+    'ETH': 0.30,
+    'SOL': 0.10,
+    'Others': 0.10
+})
+
+# Add active views
+bl.add_view(
+    assets=['BTC'],
+    expected_return=0.02,  # BTC returns 2%
+    confidence=0.8
+)
+bl.add_view(
+    assets=['ETH', 'SOL'],
+    expected_return=0.01,  # ETH-SOL spread returns 1%
+    confidence=0.6,
+    view_type='relative'
+)
+
+# Get posterior weights
+weights = bl.optimize(covariance_matrix=cov)
+print(f"Optimal weights: {weights}")
+```
+
+**Black-Litterman Formula**:
+```
+Posterior Return = [(τΣ)⁻¹ + P'Ω⁻¹P]⁻¹ × [(τΣ)⁻¹π + P'Ω⁻¹Q]
+```
+
+Where:
+- π = equilibrium returns
+- P = view matrix
+- Q = view returns
+- Ω = view uncertainty
+
+##### Online Convex Optimizer
+
+Adaptive portfolio optimization:
+
+```python
+from ml_engine.advanced_portfolio_optimizer import OnlineConvexOptimizer
+
+online = OnlineConvexOptimizer(
+    algorithm='ons',  # Online Newton Step
+    learning_rate=0.1,
+    regularization=0.01
+)
+
+# Update portfolio iteratively
+for returns in daily_returns:
+    weights = online.get_weights()
+    online.update(returns)
+
+print(f"Final weights: {online.get_weights()}")
+print(f"Cumulative wealth: {online.wealth}")
+```
+
+**Available Algorithms**:
+
+| Algorithm | Description | Best For |
+|-----------|-------------|----------|
+| OGD | Online Gradient Descent | Simple, fast |
+| FTRL | Follow The Regularized Leader | Sparse solutions |
+| ONS | Online Newton Step | Best regret bounds |
+
+##### Transaction Cost Optimizer
+
+Optimizes with realistic transaction costs:
+
+```python
+from ml_engine.advanced_portfolio_optimizer import TransactionCostOptimizer
+
+tc_opt = TransactionCostOptimizer(
+    spread_cost=0.001,
+    market_impact_coeff=0.0001,
+    fixed_cost=1.0
+)
+
+# Optimize considering turnover
+new_weights = tc_opt.optimize(
+    current_weights=current,
+    target_weights=target,
+    portfolio_value=1000000
+)
+
+print(f"Adjusted weights: {new_weights}")
+print(f"Estimated transaction cost: ${tc_opt.last_cost:,.0f}")
+```
+
+##### Almgren-Chriss Executor
+
+Optimal execution scheduling:
+
+```python
+from ml_engine.advanced_portfolio_optimizer import AlmgrenChrissExecutor
+
+executor = AlmgrenChrissExecutor(
+    risk_aversion=1e-6,
+    volatility=0.02,
+    market_impact=0.0001
+)
+
+# Get optimal execution schedule
+schedule = executor.get_schedule(
+    total_shares=10000,
+    time_horizon=24,  # hours
+    n_periods=12
+)
+
+for period, shares in enumerate(schedule):
+    print(f"Period {period}: Trade {shares:.0f} shares")
+```
+
+**Almgren-Chriss Model**:
+```
+Optimal trajectory minimizes: E[Cost] + λ × Var[Cost]
+Cost = temporary impact + permanent impact + volatility risk
+```
+
+---
+
+### Pipeline 5: Execution Pipeline
+
+**File**: `ml_engine/execution_pipeline.py`
+
+**Purpose**: High-performance execution with multi-agent system and RL optimization.
+
+#### Components
+
+##### Market Maker Agent
+
+Implements Stoikov's optimal market making:
+
+```python
+from ml_engine.execution_pipeline import MarketMakerAgent
+
+mm = MarketMakerAgent(
+    risk_aversion=0.1,
+    inventory_target=0,
+    max_inventory=100
+)
+
+# Get optimal quotes
+mid_price = 50000
+volatility = 0.02
+quotes = mm.get_quotes(
+    mid_price=mid_price,
+    volatility=volatility,
+    current_inventory=10,
+    time_remaining=3600
+)
+
+print(f"Bid: {quotes['bid_price']} ({quotes['bid_size']} units)")
+print(f"Ask: {quotes['ask_price']} ({quotes['ask_size']} units)")
+```
+
+**Stoikov's Optimal Spread**:
+```
+reservation_price = mid - q × γ × σ² × T
+optimal_spread = γ × σ² × T + (2/γ) × ln(1 + γ/k)
+```
+
+Where q = inventory, γ = risk aversion, T = time remaining
+
+##### Smart Order Router
+
+Routes orders to optimal venues:
+
+```python
+from ml_engine.execution_pipeline import SmartOrderRouter
+
+router = SmartOrderRouter(
+    venues=['binance', 'bybit', 'hyperliquid'],
+    selection_method='ucb'  # Upper Confidence Bound
+)
+
+# Update venue performance
+router.update_venue('binance', execution_quality=0.998, latency=50)
+
+# Get optimal routing
+routing = router.route_order(
+    symbol='BTC/USDT',
+    size=1.0,
+    side='buy'
+)
+
+print(f"Route to: {routing['venue']}")
+print(f"Expected slippage: {routing['expected_slippage']:.4f}")
+```
+
+##### Execution Manager
+
+Manages order execution with multiple strategies:
+
+```python
+from ml_engine.execution_pipeline import ExecutionManager
+
+manager = ExecutionManager()
+
+# Execute with TWAP
+await manager.execute_twap(
+    symbol='BTC/USDT',
+    total_size=10,
+    duration_seconds=3600,
+    n_slices=12
+)
+
+# Execute with VWAP
+await manager.execute_vwap(
+    symbol='ETH/USDT',
+    total_size=50,
+    volume_profile=historical_volume_profile
+)
+
+# Execute with Almgren-Chriss
+await manager.execute_optimal(
+    symbol='SOL/USDT',
+    total_size=100,
+    urgency=0.5  # 0=passive, 1=aggressive
+)
+```
+
+##### RL Execution Agent
+
+Learns optimal execution from experience:
+
+```python
+from ml_engine.execution_pipeline import RLExecutionAgent
+
+agent = RLExecutionAgent(
+    state_dim=10,
+    action_dim=5,
+    hidden_dim=64
+)
+
+# Training loop
+for episode in range(1000):
+    state = env.reset()
+    done = False
+
+    while not done:
+        action = agent.select_action(state)
+        next_state, reward, done = env.step(action)
+        agent.update(state, action, reward, next_state, done)
+        state = next_state
+
+# Use trained agent
+action = agent.select_action(current_state, deterministic=True)
+```
+
+**State Features**:
+- Remaining inventory
+- Time remaining
+- Recent price changes
+- Order book imbalance
+- Recent execution quality
+
+---
+
+### Pipeline 6: Monitoring Pipeline
+
+**File**: `ml_engine/monitoring_pipeline.py`
+
+**Purpose**: Comprehensive monitoring with performance attribution and overfitting detection.
+
+#### Components
+
+##### Performance Attributor
+
+Brinson-Fachler style attribution:
+
+```python
+from ml_engine.monitoring_pipeline import PerformanceAttributor
+
+attributor = PerformanceAttributor(
+    benchmark_weights={'BTC': 0.5, 'ETH': 0.3, 'Others': 0.2}
+)
+
+# Calculate attribution
+attribution = attributor.attribute(
+    portfolio_weights={'BTC': 0.6, 'ETH': 0.25, 'SOL': 0.15},
+    portfolio_returns={'BTC': 0.05, 'ETH': 0.03, 'SOL': 0.08},
+    benchmark_returns={'BTC': 0.05, 'ETH': 0.03, 'Others': 0.02}
+)
+
+print(f"Allocation effect: {attribution['allocation']:.4f}")
+print(f"Selection effect: {attribution['selection']:.4f}")
+print(f"Interaction effect: {attribution['interaction']:.4f}")
+print(f"Total active return: {attribution['total']:.4f}")
+```
+
+**Brinson Attribution**:
+```
+Allocation = Σ(w_p - w_b) × (r_b,s - r_b)
+Selection = Σw_b × (r_p,s - r_b,s)
+Interaction = Σ(w_p - w_b) × (r_p,s - r_b,s)
+```
+
+##### PBO Analyzer (Probability of Backtest Overfitting)
+
+Detects strategy overfitting:
+
+```python
+from ml_engine.monitoring_pipeline import PBOAnalyzer
+
+pbo = PBOAnalyzer(n_partitions=16)
+
+# Analyze strategy performance matrix
+# Each row = strategy variant, each column = time period
+pbo_result = pbo.analyze(performance_matrix)
+
+print(f"PBO: {pbo_result['pbo']:.2%}")
+print(f"Performance degradation: {pbo_result['degradation']:.2%}")
+
+if pbo_result['pbo'] > 0.5:
+    print("WARNING: High probability of overfitting!")
+```
+
+**CSCV Method (Combinatorially Symmetric Cross-Validation)**:
+1. Split data into S partitions
+2. For each combination, train on half, test on other half
+3. Compare in-sample vs out-of-sample performance
+4. PBO = P(OOS rank < IS rank)
+
+##### Stress Testing Framework
+
+Tests portfolio under extreme scenarios:
+
+```python
+from ml_engine.monitoring_pipeline import StressTestingFramework
+
+stress = StressTestingFramework()
+
+# Run predefined scenarios
+results = stress.run_scenarios(
+    portfolio_weights={'BTC': 0.4, 'ETH': 0.3, 'SOL': 0.3},
+    portfolio_value=1000000
+)
+
+for scenario, result in results.items():
+    print(f"{scenario}: ${result['pnl']:,.0f} ({result['pnl_pct']:.1%})")
+```
+
+**Built-in Scenarios**:
+
+| Scenario | Description |
+|----------|-------------|
+| `market_crash_2020` | COVID crash (-40% BTC) |
+| `luna_collapse` | Terra/Luna event |
+| `ftx_contagion` | FTX bankruptcy |
+| `flash_crash` | -20% in 1 hour |
+| `correlation_breakdown` | Correlations go to 1 |
+| `liquidity_crisis` | 90% volume drop |
+| `rate_shock` | Interest rate spike |
+| `regulatory_ban` | Major country ban |
+| `stablecoin_depeg` | USDT/USDC depeg |
+
+##### Model Diagnostics Engine
+
+Real-time model health monitoring:
+
+```python
+from ml_engine.monitoring_pipeline import ModelDiagnosticsEngine
+
+diagnostics = ModelDiagnosticsEngine()
+
+# Add prediction and actual
+diagnostics.add_observation(
+    prediction=0.02,
+    actual=0.015,
+    features=current_features,
+    timestamp=datetime.now()
+)
+
+# Get diagnostics report
+report = diagnostics.get_report()
+
+print(f"Prediction bias: {report['bias']:.4f}")
+print(f"RMSE: {report['rmse']:.4f}")
+print(f"Hit rate: {report['hit_rate']:.1%}")
+print(f"Information coefficient: {report['ic']:.3f}")
+print(f"Feature drift detected: {report['drift_features']}")
+```
+
+---
+
+### Pipeline 7: Advanced ML Optimizations
+
+**File**: `ml_engine/advanced_ml_optimizations.py`
+
+**Purpose**: State-of-the-art ML techniques including meta-learning and Bayesian deep learning.
+
+#### Components
+
+##### MAML Optimizer (Model-Agnostic Meta-Learning)
+
+Fast adaptation to new market regimes:
+
+```python
+from ml_engine.advanced_ml_optimizations import MAMLOptimizer
+
+maml = MAMLOptimizer(
+    model=base_model,
+    inner_lr=0.01,
+    outer_lr=0.001,
+    n_inner_steps=5
+)
+
+# Create regime-specific tasks
+tasks = [
+    {'features': bull_features, 'targets': bull_returns},
+    {'features': bear_features, 'targets': bear_returns},
+    {'features': sideways_features, 'targets': sideways_returns}
+]
+
+# Meta-train
+maml.meta_train(tasks, n_epochs=100)
+
+# Fast adaptation to new regime (few-shot learning)
+adapted_model = maml.adapt(
+    new_features=new_regime_data,
+    new_targets=new_regime_returns,
+    n_steps=5
+)
+```
+
+**MAML Objective**:
+```
+θ* = argmin_θ Σ L(f_{θ - α∇L(θ, D_train)}, D_test)
+```
+
+Meta-learns initialization that can quickly adapt to any regime.
+
+##### Bayesian Neural Network
+
+Uncertainty quantification via MC Dropout:
+
+```python
+from ml_engine.advanced_ml_optimizations import BayesianNeuralNetwork
+
+bnn = BayesianNeuralNetwork(
+    input_dim=50,
+    hidden_dims=[64, 32],
+    dropout_rate=0.2,
+    n_samples=100
+)
+
+# Train (with dropout)
+bnn.fit(X_train, y_train, epochs=100)
+
+# Predict with uncertainty
+mean, std = bnn.predict(X_test, return_uncertainty=True)
+
+# Use uncertainty for position sizing
+confidence = 1 / (1 + std)
+position = signal * confidence
+```
+
+**Epistemic vs Aleatoric Uncertainty**:
+- Epistemic: Model uncertainty (reducible with more data)
+- Aleatoric: Data uncertainty (irreducible)
+
+##### Evidential Neural Network
+
+Direct uncertainty estimation without sampling:
+
+```python
+from ml_engine.advanced_ml_optimizations import EvidentialNeuralNetwork
+
+enn = EvidentialNeuralNetwork(
+    input_dim=50,
+    hidden_dims=[64, 32]
+)
+
+# Outputs Normal-Inverse-Gamma parameters
+enn.fit(X_train, y_train)
+
+# Get prediction with uncertainties
+result = enn.predict(X_test)
+
+print(f"Mean prediction: {result['mean']}")
+print(f"Aleatoric uncertainty: {result['aleatoric']}")
+print(f"Epistemic uncertainty: {result['epistemic']}")
+print(f"Total uncertainty: {result['total']}")
+```
+
+**Evidential Output**:
+```
+Output = (γ, ν, α, β) parametrizing Normal-Inverse-Gamma
+Mean = γ
+Aleatoric = β / (α - 1)
+Epistemic = β / (ν × (α - 1))
+```
+
+##### Advanced Causal Inference
+
+Double ML for causal effect estimation:
+
+```python
+from ml_engine.advanced_ml_optimizations import AdvancedCausalInference
+
+causal = AdvancedCausalInference(
+    treatment_model='random_forest',
+    outcome_model='gradient_boosting'
+)
+
+# Estimate causal effect with confounding control
+ate = causal.estimate_ate_double_ml(
+    data=df,
+    treatment='funding_rate',
+    outcome='next_day_return',
+    confounders=['volatility', 'volume', 'trend']
+)
+
+print(f"Average Treatment Effect: {ate['ate']:.4f}")
+print(f"Standard Error: {ate['se']:.4f}")
+print(f"95% CI: [{ate['ci_lower']:.4f}, {ate['ci_upper']:.4f}]")
+```
+
+**Double ML**:
+1. Estimate E[Y|X] with ML model
+2. Estimate E[T|X] with ML model
+3. Regress residuals to get unbiased ATE
+
+---
+
+### Pipeline Integration: Full System
+
+All pipelines work together in the main trading loop:
+
+```python
+from ml_engine import (
+    MetaPipeline,
+    AdvancedDataPipeline,
+    AlphaPipeline,
+    AdvancedRiskPipeline,
+    AdvancedPortfolioPipeline,
+    MultiAgentExecutionSystem,
+    MonitoringPipeline,
+    AdvancedMLPipeline
+)
+
+# Initialize all pipelines
+meta = MetaPipeline()
+data = AdvancedDataPipeline()
+alpha = AlphaPipeline()
+risk = AdvancedRiskPipeline()
+portfolio = AdvancedPortfolioPipeline()
+execution = MultiAgentExecutionSystem()
+monitoring = MonitoringPipeline()
+ml_advanced = AdvancedMLPipeline()
+
+# Main trading loop
+async def trading_iteration():
+    # 1. Meta: Detect regime and adjust parameters
+    regime = meta.detect_regime(market_data)
+    params = meta.get_regime_parameters(regime)
+
+    # 2. Data: Process raw data
+    processed = data.process(raw_data)
+
+    # 3. Alpha: Generate signals
+    signals = alpha.generate_signals(processed, regime)
+
+    # 4. Risk: Assess portfolio risk
+    risk_metrics = risk.analyze(current_positions, signals)
+
+    # 5. Portfolio: Optimize allocation
+    target_weights = portfolio.optimize(
+        signals=signals,
+        risk_constraints=risk_metrics,
+        regime=regime
+    )
+
+    # 6. Execution: Execute trades
+    trades = await execution.execute(
+        current_weights=current_weights,
+        target_weights=target_weights
+    )
+
+    # 7. Monitoring: Track performance
+    monitoring.update(trades, risk_metrics)
+
+    # 8. ML: Adapt models if needed
+    if monitoring.should_retrain():
+        ml_advanced.adapt_to_regime(regime, recent_data)
+```
+
+### Performance Expectations
+
+| Metric | Target | Description |
+|--------|--------|-------------|
+| Sharpe Ratio | > 2.5 | Risk-adjusted return |
+| Max Drawdown | < 15% | Worst peak-to-trough |
+| Win Rate | > 55% | Profitable trades |
+| Profit Factor | > 1.5 | Gross profit / Gross loss |
+| Information Ratio | > 1.0 | Active return / Tracking error |
 
 ---
 
