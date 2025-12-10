@@ -1,5 +1,8 @@
 """
 ML Engine - Core Machine Learning Trading Components
+
+Optimiertes ML-Trading-System basierend auf der Adaptiven Markthypothese (AMH)
+mit mehrschichtiger Pipeline-Architektur.
 """
 
 from .config import Config
@@ -33,8 +36,128 @@ from .drift_protection import (
     DriftReport
 )
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# ERWEITERTE PIPELINE-ARCHITEKTUR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# 0. META-PIPELINE: System-Steuerung & Adaptivität
+from .meta_pipeline import (
+    MetaPipeline,
+    HMMRegimeDetector,
+    HMMRegimeState,
+    BayesianHyperparameterOptimizer,
+    CapitalAllocationEngine,
+    StrategyPerformance,
+    CapitalAllocation,
+    MetaPipelineState
+)
+
+# 1. VERFEINERTE DATEN-PIPELINE
+from .advanced_data_pipeline import (
+    AdvancedDataPipeline,
+    MicrostructureAnalyzer,
+    MicrostructureFeatures,
+    OnlineOutlierDetector,
+    NLPSentimentPipeline,
+    SentimentAnalysis,
+    SABRVolatilitySurface,
+    VolatilitySurface,
+    StationarityTransformer,
+    TradeEvent,
+    ProcessedFeatures
+)
+
+# 2. TIEFGEHENDE ALPHA-PIPELINE
+from .alpha_pipeline import (
+    AlphaPipeline,
+    HierarchicalAlphaModel,
+    MomentumFeatures,
+    MeanReversionFeatures,
+    CarryFeatures,
+    GaussianProcessRegressor,
+    QuantileRandomForest,
+    CausalInferenceEngine,
+    AlphaPrediction,
+    GPPrediction,
+    CausalEffect
+)
+
+# 3. FORTGESCHRITTENE RISIKO-PIPELINE
+from .advanced_risk_pipeline import (
+    AdvancedRiskPipeline,
+    KalmanFilterBeta,
+    MultiFactorRiskModel,
+    CornishFisherVaR,
+    CopulaRiskModel,
+    LiquidityAdjustedRisk,
+    FactorExposure,
+    RiskDecomposition,
+    VaREstimate,
+    LiquidityRisk,
+    CopulaMetrics,
+    ComprehensiveRiskReport
+)
+
+# 4. OPTIMIERTE PORTFOLIO-KONSTRUKTION
+from .advanced_portfolio_optimizer import (
+    AdvancedPortfolioPipeline,
+    BlackLittermanOptimizer,
+    BlackLittermanView,
+    OnlineConvexOptimizer,
+    TransactionCostOptimizer,
+    TransactionCostModel,
+    AlmgrenChrissExecutor,
+    RobustPortfolioOptimizer,
+    PortfolioWeights,
+    TradeSchedule
+)
+
+# 5. HOCHLEISTUNGS-AUSFÜHRUNG
+from .execution_pipeline import (
+    MultiAgentExecutionSystem,
+    MarketMakerAgent,
+    SmartOrderRouter,
+    ExecutionManager,
+    RLExecutionAgent,
+    ExecutionState,
+    ExecutionAction,
+    ExecutionResult,
+    AgentRecommendation,
+    OrderType,
+    ExecutionStyle,
+    Venue
+)
+
+# 6. UMFASSENDE ÜBERWACHUNGS-PIPELINE
+from .monitoring_pipeline import (
+    MonitoringPipeline,
+    PerformanceAttributor,
+    PerformanceAttribution,
+    PBOAnalyzer,
+    PBOResult,
+    StressTestingFramework,
+    StressScenario,
+    StressTestResult,
+    ModelDiagnosticsEngine,
+    ModelDiagnostics
+)
+
+# 7. FORTSCHRITTLICHE ML-OPTIMIERUNGEN
+from .advanced_ml_optimizations import (
+    AdvancedMLPipeline,
+    MAMLOptimizer,
+    MAMLTask,
+    BayesianNeuralNetwork,
+    EvidentialNeuralNetwork,
+    UncertaintyEstimate,
+    AdvancedCausalInference,
+    CausalEstimate
+)
+
 __all__ = [
-    # Core Components
+    # ═══════════════════════════════════════════════════════════════════════════
+    # CORE COMPONENTS
+    # ═══════════════════════════════════════════════════════════════════════════
     'Config',
     'DataCollector',
     'MarketDataAggregator',
@@ -50,7 +173,10 @@ __all__ = [
     'OptionsDataCollector',
     'RegimeDetector',
     'CorrelationScreener',
-    # Inflation/Deflation Strategy
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # INFLATION/DEFLATION STRATEGY
+    # ═══════════════════════════════════════════════════════════════════════════
     'TokenUnlockPipeline',
     'UnlockRisk',
     'UnlockEvent',
@@ -62,10 +188,127 @@ __all__ = [
     'OrderbookSnapshot',
     'InflationDeflationStrategy',
     'InflationSignal',
-    # Drift Protection
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # DRIFT PROTECTION
+    # ═══════════════════════════════════════════════════════════════════════════
     'DriftProtectionPipeline',
     'DriftConfig',
     'DriftSeverity',
     'ModelAction',
     'DriftReport',
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 0. META-PIPELINE
+    # ═══════════════════════════════════════════════════════════════════════════
+    'MetaPipeline',
+    'HMMRegimeDetector',
+    'HMMRegimeState',
+    'BayesianHyperparameterOptimizer',
+    'CapitalAllocationEngine',
+    'StrategyPerformance',
+    'CapitalAllocation',
+    'MetaPipelineState',
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 1. ADVANCED DATA PIPELINE
+    # ═══════════════════════════════════════════════════════════════════════════
+    'AdvancedDataPipeline',
+    'MicrostructureAnalyzer',
+    'MicrostructureFeatures',
+    'OnlineOutlierDetector',
+    'NLPSentimentPipeline',
+    'SentimentAnalysis',
+    'SABRVolatilitySurface',
+    'VolatilitySurface',
+    'StationarityTransformer',
+    'TradeEvent',
+    'ProcessedFeatures',
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 2. ALPHA PIPELINE
+    # ═══════════════════════════════════════════════════════════════════════════
+    'AlphaPipeline',
+    'HierarchicalAlphaModel',
+    'MomentumFeatures',
+    'MeanReversionFeatures',
+    'CarryFeatures',
+    'GaussianProcessRegressor',
+    'QuantileRandomForest',
+    'CausalInferenceEngine',
+    'AlphaPrediction',
+    'GPPrediction',
+    'CausalEffect',
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 3. ADVANCED RISK PIPELINE
+    # ═══════════════════════════════════════════════════════════════════════════
+    'AdvancedRiskPipeline',
+    'KalmanFilterBeta',
+    'MultiFactorRiskModel',
+    'CornishFisherVaR',
+    'CopulaRiskModel',
+    'LiquidityAdjustedRisk',
+    'FactorExposure',
+    'RiskDecomposition',
+    'VaREstimate',
+    'LiquidityRisk',
+    'CopulaMetrics',
+    'ComprehensiveRiskReport',
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 4. ADVANCED PORTFOLIO OPTIMIZER
+    # ═══════════════════════════════════════════════════════════════════════════
+    'AdvancedPortfolioPipeline',
+    'BlackLittermanOptimizer',
+    'BlackLittermanView',
+    'OnlineConvexOptimizer',
+    'TransactionCostOptimizer',
+    'TransactionCostModel',
+    'AlmgrenChrissExecutor',
+    'RobustPortfolioOptimizer',
+    'PortfolioWeights',
+    'TradeSchedule',
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 5. EXECUTION PIPELINE
+    # ═══════════════════════════════════════════════════════════════════════════
+    'MultiAgentExecutionSystem',
+    'MarketMakerAgent',
+    'SmartOrderRouter',
+    'ExecutionManager',
+    'RLExecutionAgent',
+    'ExecutionState',
+    'ExecutionAction',
+    'ExecutionResult',
+    'AgentRecommendation',
+    'OrderType',
+    'ExecutionStyle',
+    'Venue',
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 6. MONITORING PIPELINE
+    # ═══════════════════════════════════════════════════════════════════════════
+    'MonitoringPipeline',
+    'PerformanceAttributor',
+    'PerformanceAttribution',
+    'PBOAnalyzer',
+    'PBOResult',
+    'StressTestingFramework',
+    'StressScenario',
+    'StressTestResult',
+    'ModelDiagnosticsEngine',
+    'ModelDiagnostics',
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 7. ADVANCED ML OPTIMIZATIONS
+    # ═══════════════════════════════════════════════════════════════════════════
+    'AdvancedMLPipeline',
+    'MAMLOptimizer',
+    'MAMLTask',
+    'BayesianNeuralNetwork',
+    'EvidentialNeuralNetwork',
+    'UncertaintyEstimate',
+    'AdvancedCausalInference',
+    'CausalEstimate',
 ]
